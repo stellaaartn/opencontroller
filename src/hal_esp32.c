@@ -1,28 +1,26 @@
 #ifndef UNIT_TEST  // skip on native test build
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include "motor.h"
 #include "driver/mcpwm_prelude.h"
 #include "esp_log.h"
 
 #define MOTOR_PWM_GPIO_A  18   // IN1 / forward
 #define MOTOR_PWM_GPIO_B  19   // IN2 / reverse
 #define PWM_FREQ_HZ       20000
-
-static const char *TAG = "motor";
-
-// --- motor driver -----------------------------------------------------------
+#define PWM_RES_HZ    1000000
 
 static mcpwm_cmpr_handle_t cmp_a, cmp_b;
+static uint32_t s_period;
 
-static void motor_init(void)
+static void hal_motor_init(void)
 {
+    s_period = PWM_RES_HZ / PWM_FREQ_HZ;
     mcpwm_timer_handle_t timer;
     mcpwm_timer_config_t timer_cfg = {
         .group_id      = 0,
         .clk_src       = MCPWM_TIMER_CLK_SRC_DEFAULT,
-        .resolution_hz = 1000000,   // 1 MHz tick
-        .period_ticks  = 1000000 / PWM_FREQ_HZ,
+        .resolution_hz = PWM_RES_HZ,
+        .period_ticks  = s_period;
         .count_mode    = MCPWM_TIMER_COUNT_MODE_UP,
     };
     ESP_ERROR_CHECK(mcpwm_new_timer(&timer_cfg, &timer));
@@ -61,48 +59,12 @@ static void motor_init(void)
     ESP_ERROR_CHECK(mcpwm_timer_start_stop(timer, MCPWM_TIMER_START_NO_STOP));
 }
 
-// duty: -100 (full reverse) .. +100 (full forward), 0 = stop
-void motor_set(int duty)
+void hal_motor_set_pwm(int ch_a_duty, int ch_b_duty)
 {
-    uint32_t period = 1000000 / PWM_FREQ_HZ;
-    if (duty > 0) {
-        uint32_t ticks = (uint32_t)(period * duty / 100);
-        mcpwm_comparator_set_compare_value(cmp_a, ticks);
-        mcpwm_comparator_set_compare_value(cmp_b, 0);
-    } else if (duty < 0) {
-        uint32_t ticks = (uint32_t)(period * (-duty) / 100);
-        mcpwm_comparator_set_compare_value(cmp_a, 0);
-        mcpwm_comparator_set_compare_value(cmp_b, ticks);
-    } else {
-        mcpwm_comparator_set_compare_value(cmp_a, 0);
-        mcpwm_comparator_set_compare_value(cmp_b, 0);
-    }
+    mcpwm_comparator_set_compare_value(cmp_a, s_period * ch_a_duty / 100);
+    mcpwm_comparator_set_compare_value(cmp_b, s_period * ch_b_duty / 100);
 }
 
-// ---------------------------------------------------------------------------
-
-void app_main(void)
-{
-    motor_init();
-
-    while (1) {
-        ESP_LOGI(TAG, "UP  50%%");
-        motor_set(50);
-        vTaskDelay(pdMS_TO_TICKS(2000));
-
-        ESP_LOGI(TAG, "STOP");
-        motor_set(0);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-
-        ESP_LOGI(TAG, "DOWN 50%%");
-        motor_set(-50);
-        vTaskDelay(pdMS_TO_TICKS(2000));
-
-        ESP_LOGI(TAG, "STOP");
-        motor_set(0);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-}
 
 #endif // UNIT_TEST
 
