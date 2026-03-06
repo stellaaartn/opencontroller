@@ -12,7 +12,7 @@
 static mcpwm_cmpr_handle_t cmp_a, cmp_b;
 static uint32_t s_period;
 
-static void hal_motor_init(void)
+static void hal_init(void)
 {
     s_period = PWM_RES_HZ / PWM_FREQ_HZ;
     mcpwm_timer_handle_t timer;
@@ -59,7 +59,7 @@ static void hal_motor_init(void)
     ESP_ERROR_CHECK(mcpwm_timer_start_stop(timer, MCPWM_TIMER_START_NO_STOP));
 }
 
-void hal_motor_set_pwm(int ch_a_duty, int ch_b_duty)
+void hal_set_pwm(int ch_a_duty, int ch_b_duty)
 {
     mcpwm_comparator_set_compare_value(cmp_a, s_period * ch_a_duty / 100);
     mcpwm_comparator_set_compare_value(cmp_b, s_period * ch_b_duty / 100);
