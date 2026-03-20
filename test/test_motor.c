@@ -1,30 +1,95 @@
 #ifdef UNIT_TEST
 
 #include <unity.h>
-#include <stdint.h>
+#include <stdlib.h>
 
-// --- stubs ------------------------------------------------------------------
-static int stub_rpwm[2], stub_lpwm[2], stub_enabled[2];
-void hal_set_pwm(int m, int r, int l) { stub_rpwm[m]=r; stub_lpwm[m]=l; }
-void hal_enable(int m, int en)         { stub_enabled[m]=en; }
-void hal_init(void)                          {}
+// --- HAL stub ---------------------------------------------------------------
+static int stub_rpwm[2], stub_lpwm[2], stub_enabled[2], stub_hal_init;
+
+void hal_motor_set_pwm(int motor, int r, int l) { stub_rpwm[motor]=r; stub_lpwm[motor]=l; }
+void hal_motor_enable(int motor, int en)         { stub_enabled[motor]=en; }
+void hal_init(void)                              { stub_hal_init=1; }
 
 #include "../src/motor.c"
 
-void test_sync_ok(void) {
-    sync_state_t s = sync_update(70);
-    TEST_ASSERT_EQUAL(SYNC_OK, s);
-    TEST_ASSERT_EQUAL(70, stub_rpwm[MOTOR_A]);
-    TEST_ASSERT_EQUAL(70, stub_rpwm[MOTOR_B]);
+void setUp(void)
+{
+    stub_rpwm[0]=stub_rpwm[1]=stub_lpwm[0]=stub_lpwm[1]=0;
+    stub_enabled[0]=stub_enabled[1]=0;
+    motor_init();
+}
+void tearDown(void) {}
 
+void test_motor_init_enables_both(void)
+{
+    TEST_ASSERT_EQUAL(1, stub_enabled[0]);
+    TEST_ASSERT_EQUAL(1, stub_enabled[1]);
 }
 
-int main(void) {
-    UNIT_BEGIN();
+void test_motor_forward(void)
+{
+    motor_set(MOTOR_A, 80);
+    TEST_ASSERT_EQUAL(80, stub_rpwm[0]);
+    TEST_ASSERT_EQUAL(0,  stub_lpwm[0]);
+}
 
-    RUN_TEST(test_sync_ok);
+void test_motor_reverse(void)
+{
+    motor_set(MOTOR_A, -80);
+    TEST_ASSERT_EQUAL(0,  stub_rpwm[0]);
+    TEST_ASSERT_EQUAL(80, stub_lpwm[0]);
+}
 
+void test_motor_stop_immediate(void)
+{
+    motor_set(MOTOR_A, 70);
+    motor_stop_immediate(MOTOR_A);
+    TEST_ASSERT_EQUAL(0, stub_rpwm[0]);
+    TEST_ASSERT_EQUAL(0, stub_lpwm[0]);
+    TEST_ASSERT_EQUAL(0, motor_get_duty(MOTOR_A));
+}
+
+void test_motor_clamps(void)
+{
+    motor_set(MOTOR_A, 150);
+    TEST_ASSERT_EQUAL(100, stub_rpwm[0]);
+    motor_set(MOTOR_A, -150);
+    TEST_ASSERT_EQUAL(100, stub_lpwm[0]);
+}
+
+void test_soft_stop_ramps_down(void)
+{
+    motor_set(MOTOR_A, 50);
+    int done = 0;
+    for (int i = 0; i < 20 && !done; i++) {
+        done = motor_soft_stop_tick(MOTOR_A);
+    }
+    TEST_ASSERT_EQUAL(1, done);
+    TEST_ASSERT_EQUAL(0, motor_get_duty(MOTOR_A));
+}
+
+void test_soft_stop_reverse(void)
+{
+    motor_set(MOTOR_A, -50);
+    int done = 0;
+    for (int i = 0; i < 20 && !done; i++) {
+        done = motor_soft_stop_tick(MOTOR_A);
+    }
+    TEST_ASSERT_EQUAL(1, done);
+    TEST_ASSERT_EQUAL(0, motor_get_duty(MOTOR_A));
+}
+
+int main(void)
+{
+    UNITY_BEGIN();
+    RUN_TEST(test_motor_init_enables_both);
+    RUN_TEST(test_motor_forward);
+    RUN_TEST(test_motor_reverse);
+    RUN_TEST(test_motor_stop_immediate);
+    RUN_TEST(test_motor_clamps);
+    RUN_TEST(test_soft_stop_ramps_down);
+    RUN_TEST(test_soft_stop_reverse);
     return UNITY_END();
 }
 
-#endif
+#endif // UNIT_TEST
